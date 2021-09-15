@@ -8,9 +8,10 @@ namespace Filine
 {
     public partial class FormMain : Form
     {
-        bool FiltersChanged = false;
-        List<String> Lines = new List<String> { };
-        List<String> FLines = new List<String> { };
+        String FileName = "";
+        List<String> Lines    = new List<String> { };
+        List<String> FLines   = new List<String> { };
+        List<Int32>  FEntries = new List<Int32>  { };
         static NumberFormatInfo NFI = new CultureInfo("en-US", false).NumberFormat;
 
         public FormMain()
@@ -37,8 +38,8 @@ namespace Filine
                             {
                                 case "File": tbFile.Text = value; break;
                                 case "Filter":
-                                    var lv = lvFilters.Items.Add(value);
-                                    lv.Checked = (rec[2] == "+");
+                                    TreeNode Node = tvFilters.Nodes.Add(value);
+                                    Node.StateImageIndex = (rec[2] == "+")? 1 : (rec[2] == "-") ? 2 : 0;
                                     break;
                                 //
                                 case "MoveStep": nudMoveStep.Value = (Decimal)Double.Parse(value); break;
@@ -71,8 +72,8 @@ namespace Filine
             using (StreamWriter file = File.CreateText("filine.ini"))
             {
                 file.WriteLine("File\t" + tbFile.Text);
-                for (int i = 0; i < lvFilters.Items.Count; i++)
-                    file.WriteLine("Filter\t" + lvFilters.Items[i].Text + "\t" + ((lvFilters.Items[i].Checked) ? "+" : "-"));
+                for (int i = 0; i < tvFilters.Nodes.Count; i++)
+                    file.WriteLine("Filter\t" + tvFilters.Nodes[i].Text + "\t" + "*+-"[tvFilters.Nodes[i].StateImageIndex]);
                 // Move
                 file.WriteLine("MoveStep\t" + nudMoveStep.Value);
                 file.WriteLine("MoveOffset\t" + nudMoveOffset.Value);
@@ -96,78 +97,50 @@ namespace Filine
             if (dlgOpen.ShowDialog() != DialogResult.OK)
                 return;
             tbFile.Text = dlgOpen.FileName;
-
             FileLoad();
         }
 
         private void FileLoad()
         {
+            List<String> lines = new List<String> { };
             try
             {
                 using (StreamReader file = File.OpenText(tbFile.Text))
                     while (!file.EndOfStream)
-                        Lines.Add(file.ReadLine());
+                        lines.Add(file.ReadLine());
             }
             catch (Exception exc)
             {
                 MessageBox.Show(exc.Message);
                 return;
             }
-
-            SelectByFilter();
+            // Successful
+            FileName = tbFile.Text;
+            Lines = lines;
+            FilterLines();
         }
 
         private void btnFileSave_Click(object sender, EventArgs e)
         {
             try
             {
-                using (StreamWriter file = File.CreateText(tbFile.Text))
+                using (StreamWriter file = File.CreateText(FileName))
                     foreach (String s in Lines)
                         file.WriteLine(s);
             }
             catch (Exception exc)
-            { MessageBox.Show(exc.Message); }
+            {
+                MessageBox.Show(exc.Message);
+            }
         }
 
         #region Filters
-        private void btnFilterAdd_Click(object sender, EventArgs e)
+        private void FilterLines()
         {
-            lvFilters.Items.Add(tbFilter.Text).Checked = true;
-            tbFilter.Text = "";
-            FiltersChanged = true;
-        }
-
-        private void btnFilterSub_Click(object sender, EventArgs e)
-        {
-            foreach (ListViewItem lvFilter in lvFilters.SelectedItems)
-                lvFilters.Items.Remove(lvFilter);
-            FiltersChanged = true;
-        }
-
-        private void lvFilters_ItemSelectionChanged(object sender, ListViewItemSelectionChangedEventArgs e) => btnFilterSub.Enabled = (0 < lvFilters.SelectedItems.Count);
-
-        private void lvFilters_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            if (0 < lvFilters.SelectedItems.Count)
-                tbFilter.Text = lvFilters.SelectedItems[0].Text;
-        }
-
-        private void lvFilters_ItemChecked(object sender, ItemCheckedEventArgs e) => FiltersChanged = true;
-
-        private void lvFilters_AfterLabelEdit(object sender, LabelEditEventArgs e) => FiltersChanged = true;
-
-        private void timer_Tick(object sender, EventArgs e) // Crutches
-        {
-            if (!FiltersChanged) return;
-            SelectByFilter();
-            FiltersChanged = false;
-        }
-
-        private void SelectByFilter()
-        {
-            tvLines.BeginUpdate();
-            tvLines.Nodes.Clear();
+            clbLines.BeginUpdate();
+            clbLines.Items.Clear();
             FLines.Clear();
+            FEntries.Clear();
             nudMoveX.Value = 0; nudRotateX.Value = 0;
             nudMoveY.Value = 0; nudRotateY.Value = 0;
             nudMoveZ.Value = 0; nudRotateZ.Value = 0;
@@ -175,18 +148,87 @@ namespace Filine
             for (int i = 0; i < Lines.Count; i++)
             {
                 bool add = true;
-                foreach (ListViewItem Filter in lvFilters.Items)
-                    if (Filter.Checked)
-                        if (!Lines[i].Contains(Filter.Text))
+                foreach (TreeNode Filter in tvFilters.Nodes)
+                    if (0 < Filter.StateImageIndex)
+                        if (Lines[i].Contains(Filter.Text) == (2 == Filter.StateImageIndex))
+                        {
                             add = false;
+                            break;
+                        }
                 if (!add)
                     continue;
+                FEntries.Add(i);
                 FLines.Add(Lines[i]);
-                var lvi = tvLines.Nodes.Add(Lines[i]);
-                lvi.Tag = i;
+                clbLines.Items.Add(Lines[i]);
             }
-            tvLines.EndUpdate();
+            clbLines.EndUpdate();
         }
+
+        private void btnFilterAdd_Click(object sender, EventArgs e)
+        {
+            tvFilters.Nodes.Add(tbFilter.Text).StateImageIndex = 1;
+            FilterLines();
+        }
+
+        private void btnFilterDelete_Click(object sender, EventArgs e)
+        {
+         // tvFilters.SelectedNode?.Remove();
+            tvFilters.SelectedNode.Remove();
+            btnFilterDelete.   Visible =
+            btnFilterDeleteAll.Visible = (tvFilters.SelectedNode != null);
+            FilterLines();
+        }
+
+        private void btnFilterDeleteAll_Click(object sender, EventArgs e)
+        {
+            tvFilters.Nodes.Clear();
+            btnFilterDelete.   Visible =
+            btnFilterDeleteAll.Visible = false;
+            FilterLines();
+        }
+
+        private void tvFilters_AfterSelect(object sender, TreeViewEventArgs e)
+        {
+            btnFilterDelete.   Visible =
+            btnFilterDeleteAll.Visible = (tvFilters.SelectedNode != null);
+            tbFilter.Text = tvFilters.SelectedNode.Text;
+        }
+
+        private void btnFilterLines_Click(object sender, EventArgs e) => FilterLines();
+
+        private void tvFilters_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
+        {
+            e.Node.TreeView.SelectedNode = e.Node;
+            if (e.X < e.Node.Bounds.X)
+                NodeSwitchState(e.Node, (e.Button == MouseButtons.Left)? 1 : -1);
+        }
+
+        private void tvFilters_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar == ' ')
+            {
+                NodeSwitchState((sender as TreeView).SelectedNode);
+                e.Handled = true;
+            }
+            if (e.KeyChar == '\r')
+            {
+                (sender as TreeView).SelectedNode.BeginEdit();
+                e.Handled = true;
+            }
+        }
+
+        private void tvFilters_AfterLabelEdit(object sender, NodeLabelEditEventArgs e) => FilterLines();
+
+        private void NodeSwitchState(TreeNode Node, int increment = 1)
+        {
+            int stateBase = Node.TreeView.StateImageList.Images.Count;
+            Node.StateImageIndex = (stateBase + Node.StateImageIndex + increment) % stateBase;
+            FilterLines();
+        }
+
+        private void btnDeselect_Click       (object sender, EventArgs e) { foreach (TreeNode Node in tvFilters.Nodes) Node.StateImageIndex = 0; FilterLines(); }
+        private void btnSelect_Click         (object sender, EventArgs e) { foreach (TreeNode Node in tvFilters.Nodes) Node.StateImageIndex = 1; FilterLines(); }
+        private void btnInvertSelection_Click(object sender, EventArgs e) { foreach (TreeNode Node in tvFilters.Nodes) Node.StateImageIndex = 2; FilterLines(); }
         #endregion
 
         #region Filtered Lines
@@ -224,38 +266,38 @@ namespace Filine
 
         private void ReShowLines()
         {
-            for (int i = 0; i < FLines.Count; i++)
-                tvLines.Nodes[i].Text = FLines[i];
+            //for (int i = 0; i < FLines.Count; i++)
+                //tvLines.Nodes[i].Text = FLines[i];
         }
 
         private void AlignLines(String Tag, Double Step, Double Offset)
         {
             for (int i = 0; i < FLines.Count; i++)
             {
-                if (!tvLines.Nodes[i].Checked)
-                    continue;
-                TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], Tag); // Get original line
-                tv.AlignValues(Step, Offset);
-                FLines[i] = tv.Concatenate();
-                tvLines.Nodes[i].Text = FLines[i];
+                //if (!tvLines.Nodes[i].Checked)
+                //    continue;
+                //TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], Tag); // Get original line
+                //tv.AlignValues(Step, Offset);
+                //FLines[i] = tv.Concatenate();
+                //tvLines.Nodes[i].Text = FLines[i];
             }
         }
 
-        private void btnPositionAlign_Click(object sender, EventArgs e) => AlignLines("POSITION", (Double)nudMoveStep.Value, (Double)nudMoveOffset.Value);
+        private void btnPositionAlign_Click(object sender, EventArgs e) => AlignLines("POSITION", (Double)nudMoveStep  .Value, (Double)nudMoveOffset  .Value);
         private void btnRotationAlign_Click(object sender, EventArgs e) => AlignLines("ROTATION", (Double)nudRotateStep.Value, (Double)nudRotateOffset.Value);
 
         private void nudMoveXYZ_ValueChanged(object sender, EventArgs e)
         {
             for (int i = 0; i < FLines.Count; i++)
             {
-                if (!tvLines.Nodes[i].Checked)
-                    continue;
-                TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], "POSITION"); // Get original line
-                tv.x += (Double)nudMoveX.Value;
-                tv.y += (Double)nudMoveY.Value;
-                tv.z += (Double)nudMoveZ.Value;
-                FLines[i] = tv.Concatenate();
-                tvLines.Nodes[i].Text = FLines[i];
+                //if (!tvLines.Nodes[i].Checked)
+                //    continue;
+                //TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], "POSITION"); // Get original line
+                //tv.x += (Double)nudMoveX.Value;
+                //tv.y += (Double)nudMoveY.Value;
+                //tv.z += (Double)nudMoveZ.Value;
+                //FLines[i] = tv.Concatenate();
+                //tvLines.Nodes[i].Text = FLines[i];
             }
         }
 
@@ -263,42 +305,24 @@ namespace Filine
         {
             for (int i = 0; i < FLines.Count; i++)
             {
-                if (!tvLines.Nodes[i].Checked)
-                    continue;
-                TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], "ROTATION"); // Get original line
-                tv.x += (Double)nudRotateX.Value;
-                tv.y += (Double)nudRotateY.Value;
-                tv.z += (Double)nudRotateZ.Value;
-                FLines[i] = tv.Concatenate();
-                tvLines.Nodes[i].Text = FLines[i];
+                //if (!tvLines.Nodes[i].Checked)
+                //    continue;
+                //TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], "ROTATION"); // Get original line
+                //tv.x += (Double)nudRotateX.Value;
+                //tv.y += (Double)nudRotateY.Value;
+                //tv.z += (Double)nudRotateZ.Value;
+                //FLines[i] = tv.Concatenate();
+                //tvLines.Nodes[i].Text = FLines[i];
             }
         }
 
-        private void btnDeselect_Click(object sender, EventArgs e)
-        {
-            foreach (TreeNode node in tvLines.Nodes)
-                node.Checked = false;
-        }
-
-        private void btnSelect_Click(object sender, EventArgs e)
-        {
-            foreach (TreeNode node in tvLines.Nodes)
-                node.Checked = true;
-        }
-
-        private void btnInvertSelection_Click(object sender, EventArgs e)
-        {
-            foreach (TreeNode node in tvLines.Nodes)
-                node.Checked = !node.Checked;
-        }
-
-        private void nudMoveStep_ValueChanged(object sender, EventArgs e) => nudMoveX.Increment = nudMoveY.Increment = nudMoveZ.Increment = nudMoveStep.Value;
+        private void nudMoveStep_ValueChanged  (object sender, EventArgs e) => nudMoveX.Increment   = nudMoveY.Increment   = nudMoveZ.Increment   = nudMoveStep.Value;
         private void nudRotateStep_ValueChanged(object sender, EventArgs e) => nudRotateX.Increment = nudRotateY.Increment = nudRotateZ.Increment = nudRotateStep.Value;
 
         private void btnSaveLines_Click(object sender, EventArgs e)
         {
-            foreach (TreeNode node in tvLines.Nodes)
-                Lines[(Int32)node.Tag] = FLines[node.Index] = node.Text;
+            //foreach (TreeNode node in tvLines.Nodes)
+                //Lines[(Int32)node.Tag] = FLines[node.Index] = node.Text;
         }
         #endregion
     }
