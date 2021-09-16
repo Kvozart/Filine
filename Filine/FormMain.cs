@@ -6,13 +6,61 @@ using System.Windows.Forms;
 
 namespace Filine
 {
+
     public partial class FormMain : Form
     {
+        public class TagValues
+        {
+            NumberFormatInfo NFI = new CultureInfo("en-US", false).NumberFormat;
+            public String Before = "", After = "";
+            public double x = 0, y = 0, z = 0;
+
+            public TagValues() { }
+
+            public TagValues(String line, String tag) => Read(line, tag);
+
+            public void Read(String line, String tag)
+            {
+                int t = line.ToUpper().IndexOf(tag); // position of tag
+                if (t < 0)
+                {
+                    Before = line;
+                    After = "";
+                    return;
+                }
+                int p = line.IndexOf('"', t) + 1; // first "
+                int c = line.IndexOf('"', p); // second "
+
+                Before = line.Substring(0, p);
+                After = line.Substring(c);
+
+                string[] v = line.Substring(p, c - p).Replace("  ", " ").Replace(',', '.').Split(' ');
+                x = Double.Parse(v[0], NFI);
+                y = Double.Parse(v[1], NFI);
+                z = Double.Parse(v[2], NFI);
+            }
+
+            public void AlignValues(double step, double offset, Boolean doY)
+            {
+                if (After == "" || step == 0)
+                    return;
+                if (doY)
+                    y = Math.Round((y - offset) / step) * step + offset;
+                else
+                {
+                    x = Math.Round((x - offset) / step) * step + offset;
+                    z = Math.Round((z - offset) / step) * step + offset;
+                }
+            }
+
+            public String Concatenate() => (After == "") ? Before : Before + x.ToString("f4", NFI) + " " + y.ToString("f4", NFI) + " " + z.ToString("f4", NFI) + After;
+        }
+
         String FileName = "";
-        List<String> Lines    = new List<String> { };
-        List<String> FLines   = new List<String> { };
-        List<Int32>  FEntries = new List<Int32>  { };
-        static NumberFormatInfo NFI = new CultureInfo("en-US", false).NumberFormat;
+        List<String> Lines   = new List<String> { };
+        List<String> FLines  = new List<String> { };
+        List<Int32>  Entries = new List<Int32>  { };
+        TagValues tv = new TagValues();
 
         public FormMain()
         {
@@ -38,20 +86,28 @@ namespace Filine
                             {
                                 case "File": tbFile.Text = value; break;
                                 case "Filter":
-                                    TreeNode Node = tvFilters.Nodes.Add(value);
-                                    Node.StateImageIndex = (rec[2] == "+")? 1 : (rec[2] == "-") ? 2 : 0;
+                                    tvFilters.Nodes.Add(value).StateImageIndex = (rec[2] == "+")? 1 : (rec[2] == "-") ? 2 : 0;
                                     break;
-                                //
-                                case "MoveStep": nudMoveStep.Value = (Decimal)Double.Parse(value); break;
-                                case "MoveOffset": nudMoveOffset.Value = (Decimal)Double.Parse(value); break;
-                                //case "MoveX":      nudMoveX.Value      = (Decimal)Double.Parse(value); break;
-                                //case "MoveY":      nudMoveY.Value      = (Decimal)Double.Parse(value); break;
-                                //case "MoveZ":      nudMoveZ.Value      = (Decimal)Double.Parse(value); break;
-                                case "RotateStep": nudRotateStep.Value = (Decimal)Double.Parse(value); break;
-                                case "RotateOffset": nudRotateOffset.Value = (Decimal)Double.Parse(value); break;
-                                //case "RotateX":      nudRotateX.Value      = (Decimal)Double.Parse(value); break;
-                                //case "RotateY":      nudRotateY.Value      = (Decimal)Double.Parse(value); break;
-                                //case "RotateZ":      nudRotateZ.Value      = (Decimal)Double.Parse(value); break;
+                                // Position
+                                case "PositionStep"  : nudPositionStep.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionOffset": nudPositionOffset.Value = (Decimal)Double.Parse(value); break;
+                                case "PositionXMin"  : nudPositionXMin.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionXMax"  : nudPositionXMax.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionYMin"  : nudPositionYMin.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionYMax"  : nudPositionYMax.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionZMin"  : nudPositionZMin.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionZMax"  : nudPositionZMax.  Value = (Decimal)Double.Parse(value); break;
+                                case "PositionRange" :  cbPositionRange.Checked= (value == "true"); break;
+                                // Rotation
+                                case "RotationStep"  : nudRotationStep.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationOffset": nudRotationOffset.Value = (Decimal)Double.Parse(value); break;
+                                case "RotationXMin"  : nudRotationXMin.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationXMax"  : nudRotationXMax.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationYMin"  : nudRotationYMin.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationYMax"  : nudRotationYMax.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationZMin"  : nudRotationZMin.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationZMax"  : nudRotationZMax.  Value = (Decimal)Double.Parse(value); break;
+                                case "RotationRange" :  cbRotationRange.Checked= (value == "true"); break;
                                 default:
                                     break;
                             }
@@ -59,8 +115,9 @@ namespace Filine
             }
             catch (Exception exc)
             { MessageBox.Show(exc.Message); }
-            nudMoveStep_ValueChanged(null, null);
-            nudRotateStep_ValueChanged(null, null);
+            btnFilterDeleteAll.Visible = (0 < tvFilters.Nodes.Count);
+            nudPositionStep_ValueChanged(null, null);
+            nudRotationStep_ValueChanged(null, null);
 
             // Load file to edit
             if (tbFile.Text != "")
@@ -74,18 +131,20 @@ namespace Filine
                 file.WriteLine("File\t" + tbFile.Text);
                 for (int i = 0; i < tvFilters.Nodes.Count; i++)
                     file.WriteLine("Filter\t" + tvFilters.Nodes[i].Text + "\t" + "*+-"[tvFilters.Nodes[i].StateImageIndex]);
-                // Move
-                file.WriteLine("MoveStep\t" + nudMoveStep.Value);
-                file.WriteLine("MoveOffset\t" + nudMoveOffset.Value);
-                //file.WriteLine("MoveX\t"      + nudMoveX.Value);
-                //file.WriteLine("MoveY\t"      + nudMoveY.Value);
-                //file.WriteLine("MoveZ\t"      + nudMoveZ.Value);
+                // Position
+                file.WriteLine("PositionStep\t"   + nudPositionStep.Value);
+                file.WriteLine("PositionOffset\t" + nudPositionOffset.Value);
+                file.WriteLine("PositionRange\t"  + cbPositionRange.Checked.ToString());
+                file.WriteLine("PositionXMin\t"   + nudPositionXMin.Value);    file.WriteLine("PositionXMax\t" + nudPositionXMax.Value);
+                file.WriteLine("PositionYMin\t"   + nudPositionYMin.Value);    file.WriteLine("PositionYMax\t" + nudPositionYMax.Value);
+                file.WriteLine("PositionZMin\t"   + nudPositionZMin.Value);    file.WriteLine("PositionZMax\t" + nudPositionZMax.Value);
                 // Rotation
-                file.WriteLine("RotateStep\t" + nudRotateStep.Value);
-                file.WriteLine("RotateOffset\t" + nudRotateOffset.Value);
-                //file.WriteLine("RotateX\t"      + nudRotateX.Value);
-                //file.WriteLine("RotateY\t"      + nudRotateY.Value);
-                //file.WriteLine("RotateZ\t"      + nudRotateZ.Value);
+                file.WriteLine("RotationStep\t"   + nudRotationStep.Value);
+                file.WriteLine("RotationOffset\t" + nudRotationOffset.Value);
+                file.WriteLine("RotationRange\t"  + cbRotationRange.Checked.ToString());
+                file.WriteLine("RotationXMin\t"   + nudRotationXMin.Value);    file.WriteLine("RotationXMax\t" + nudRotationXMax.Value);
+                file.WriteLine("RotationYMin\t"   + nudRotationYMin.Value);    file.WriteLine("RotationYMax\t" + nudRotationYMax.Value);
+                file.WriteLine("RotationZMin\t"   + nudRotationZMin.Value);    file.WriteLine("RotationZMax\t" + nudRotationZMax.Value);
             }
         }
 
@@ -140,10 +199,7 @@ namespace Filine
             clbLines.BeginUpdate();
             clbLines.Items.Clear();
             FLines.Clear();
-            FEntries.Clear();
-            nudMoveX.Value = 0; nudRotateX.Value = 0;
-            nudMoveY.Value = 0; nudRotateY.Value = 0;
-            nudMoveZ.Value = 0; nudRotateZ.Value = 0;
+            Entries.Clear();
             // Select
             for (int i = 0; i < Lines.Count; i++)
             {
@@ -155,9 +211,26 @@ namespace Filine
                             add = false;
                             break;
                         }
+                if (cbPositionRange.Checked)
+                {
+                    tv.Read(Lines[i], "POSITION");
+                    if (tv.x < (Double)nudPositionXMin.Value || (Double)nudPositionXMax.Value < tv.x ||
+                        tv.y < (Double)nudPositionYMin.Value || (Double)nudPositionYMax.Value < tv.y ||
+                        tv.z < (Double)nudPositionZMin.Value || (Double)nudPositionZMax.Value < tv.z)
+                        add = false;
+                }
+                if (cbRotationRange.Checked)
+                {
+                    tv.Read(Lines[i], "ROTATION");
+                    if (tv.x < (Double)nudRotationXMin.Value || (Double)nudRotationXMax.Value < tv.x ||
+                        tv.y < (Double)nudRotationYMin.Value || (Double)nudRotationYMax.Value < tv.y ||
+                        tv.z < (Double)nudRotationZMin.Value || (Double)nudRotationZMax.Value < tv.z)
+                        add = false;
+                }
                 if (!add)
                     continue;
-                FEntries.Add(i);
+                // Allowed
+                Entries.Add(i);
                 FLines.Add(Lines[i]);
                 clbLines.Items.Add(Lines[i]);
             }
@@ -172,10 +245,9 @@ namespace Filine
 
         private void btnFilterDelete_Click(object sender, EventArgs e)
         {
-         // tvFilters.SelectedNode?.Remove();
             tvFilters.SelectedNode.Remove();
-            btnFilterDelete.   Visible =
-            btnFilterDeleteAll.Visible = (tvFilters.SelectedNode != null);
+            btnFilterDelete.   Visible = (tvFilters.SelectedNode != null);
+            btnFilterDeleteAll.Visible = (0 < tvFilters.Nodes.Count);
             FilterLines();
         }
 
@@ -189,8 +261,7 @@ namespace Filine
 
         private void tvFilters_AfterSelect(object sender, TreeViewEventArgs e)
         {
-            btnFilterDelete.   Visible =
-            btnFilterDeleteAll.Visible = (tvFilters.SelectedNode != null);
+            btnFilterDelete.Visible = (tvFilters.SelectedNode != null);
             tbFilter.Text = tvFilters.SelectedNode.Text;
         }
 
@@ -232,97 +303,121 @@ namespace Filine
         #endregion
 
         #region Filtered Lines
-        class TagValues
+        private void AlignLines(string tag, Double step, Double offset, Boolean doY)
         {
-            public String Before = "", After = "";
-            public double x = 0, y = 0, z = 0;
-
-            public TagValues(String Line, String Tag)
+            if (clbLines.CheckedIndices.Count < 1)
+                return;
+            foreach (int i in clbLines.CheckedIndices)
             {
-                int t = Line.ToUpper().IndexOf(Tag); // position of tag
-                int p = Line.IndexOf('"', t) + 1; // first "
-                int c = Line.IndexOf('"', p); // second "
-
-                Before = Line.Substring(0, p);
-                After = Line.Substring(c);
-
-                string[] v = Line.Substring(p, c - p).Replace("  ", " ").Replace(',', '.').Split(' ');
-                x = Double.Parse(v[0], NFI);
-                y = Double.Parse(v[1], NFI);
-                z = Double.Parse(v[2], NFI);
+                tv.Read(FLines[i], tag); // Get stored line
+                tv.AlignValues(step, offset, doY);
+                clbLines.Items[i] = FLines[i] = tv.Concatenate();
             }
-
-            public double AlignValue(double value, double step, double offset) => Math.Truncate((value - offset) / step) * step + offset;
-
-            public void AlignValues(double step, double offset)
-            {
-                x = AlignValue(x, step, offset);
-                y = AlignValue(y, step, offset);
-                z = AlignValue(z, step, offset);
-            }
-
-            public String Concatenate() => Before + x.ToString("f4", NFI) + " " + y.ToString("f4", NFI) + " " + z.ToString("f4", NFI) + " " + After;
+            btnLinesReload.Visible =
+            btnLinesSave.  Visible = true;
         }
 
-        private void ReShowLines()
+        private void btnPositionAlign_Click(object sender, EventArgs e) => AlignLines("POSITION", (Double)nudPositionStep.Value, (Double)nudPositionOffset.Value, false);
+        private void btnRotationAlign_Click(object sender, EventArgs e) => AlignLines("ROTATION", (Double)nudRotationStep.Value, (Double)nudRotationOffset.Value, true);
+
+        private void nudPositionStep_ValueChanged(object sender, EventArgs e) =>
+            nudPositionXMin.Increment = nudPositionXMax.Increment =
+            nudPositionYMin.Increment = nudPositionYMax.Increment =
+            nudPositionZMin.Increment = nudPositionZMax.Increment = nudPositionStep.Value;
+
+        private void nudRotationStep_ValueChanged(object sender, EventArgs e) =>
+            nudRotationXMin.Increment = nudRotationXMax.Increment =
+            nudRotationYMin.Increment = nudRotationYMax.Increment =
+            nudRotationZMin.Increment = nudRotationZMax.Increment = nudRotationStep.Value;
+
+        private void clbLines_SelectedIndexChanged(object sender, EventArgs e)
         {
-            //for (int i = 0; i < FLines.Count; i++)
-                //tvLines.Nodes[i].Text = FLines[i];
+            if (tbLine.Enabled && clbLines.SelectedItem != null)
+                tbLine.Text = clbLines.SelectedItem.ToString();
         }
 
-        private void AlignLines(String Tag, Double Step, Double Offset)
+        private void clbLines_MouseClick(object sender, MouseEventArgs e)
         {
-            for (int i = 0; i < FLines.Count; i++)
+            if (20 < e.X && 0 <= clbLines.SelectedIndex)
+                clbLines.SetItemChecked(clbLines.SelectedIndex, !clbLines.GetItemChecked(clbLines.SelectedIndex));
+        }
+
+        private void btnLinesCheckAll_Click(object sender, EventArgs e)
+        {
+            for (int i = clbLines.Items.Count - 1; 0 <= i; i--)
+                clbLines.SetItemChecked(i, true);
+        }
+
+        private void btnLinesUncheckAll_Click(object sender, EventArgs e)
+        {
+            for (int i = clbLines.Items.Count - 1; 0 <= i; i--)
+                clbLines.SetItemChecked(i, false);
+        }
+
+        private void tbLine_Leave(object sender, EventArgs e)
+        {
+            if (clbLines.SelectedItem.ToString() == tbLine.Text)
+                return;
+            tbLine.Enabled = false;
+            int fi = clbLines.SelectedIndex;
+            clbLines.Items[fi] =
+            Lines[Entries[fi]] =
+            FLines[fi]         = tbLine.Text;
+            tbLine.Enabled = true;
+        }
+
+        private void tbLine_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar != '\r')
+                return;
+            tbLine_Leave(null, null);
+            e.Handled = true;
+        }
+
+        private void ValueXYZIncrement(String tag, double x, double y, double z)
+        {
+            if (clbLines.CheckedIndices.Count < 1)
+                return;
+            foreach (int i in clbLines.CheckedIndices)
             {
-                //if (!tvLines.Nodes[i].Checked)
-                //    continue;
-                //TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], Tag); // Get original line
-                //tv.AlignValues(Step, Offset);
-                //FLines[i] = tv.Concatenate();
-                //tvLines.Nodes[i].Text = FLines[i];
+                tv.Read(FLines[i], tag); // Get stored line
+                tv.x += x;
+                tv.y += y;
+                tv.z += z;
+                clbLines.Items[i] = FLines[i] = tv.Concatenate();
             }
+            btnLinesReload.Visible =
+            btnLinesSave.  Visible = true;
         }
 
-        private void btnPositionAlign_Click(object sender, EventArgs e) => AlignLines("POSITION", (Double)nudMoveStep  .Value, (Double)nudMoveOffset  .Value);
-        private void btnRotationAlign_Click(object sender, EventArgs e) => AlignLines("ROTATION", (Double)nudRotateStep.Value, (Double)nudRotateOffset.Value);
+        private void btnPositionXsub_Click(object sender, EventArgs e) => ValueXYZIncrement("POSITION", -(Double)nudPositionStep.Value, 0, 0);
+        private void btnPositionXadd_Click(object sender, EventArgs e) => ValueXYZIncrement("POSITION",  (Double)nudPositionStep.Value, 0, 0);
+        private void btnPositionYsub_Click(object sender, EventArgs e) => ValueXYZIncrement("POSITION", 0, -(Double)nudPositionStep.Value, 0);
+        private void btnPositionYadd_Click(object sender, EventArgs e) => ValueXYZIncrement("POSITION", 0,  (Double)nudPositionStep.Value, 0);
+        private void btnPositionZsub_Click(object sender, EventArgs e) => ValueXYZIncrement("POSITION", 0, 0, -(Double)nudPositionStep.Value);
+        private void btnPositionZadd_Click(object sender, EventArgs e) => ValueXYZIncrement("POSITION", 0, 0,  (Double)nudPositionStep.Value);
 
-        private void nudMoveXYZ_ValueChanged(object sender, EventArgs e)
+        private void btnRotationXsub_Click(object sender, EventArgs e) => ValueXYZIncrement("ROTATION", -(Double)nudRotationStep.Value, 0, 0);
+        private void btnRotationXadd_Click(object sender, EventArgs e) => ValueXYZIncrement("ROTATION",  (Double)nudRotationStep.Value, 0, 0);
+        private void btnRotationYsub_Click(object sender, EventArgs e) => ValueXYZIncrement("ROTATION", 0, -(Double)nudRotationStep.Value, 0);
+        private void btnRotationYadd_Click(object sender, EventArgs e) => ValueXYZIncrement("ROTATION", 0,  (Double)nudRotationStep.Value, 0);
+        private void btnRotationZsub_Click(object sender, EventArgs e) => ValueXYZIncrement("ROTATION", 0, 0, -(Double)nudRotationStep.Value);
+        private void btnRotationZadd_Click(object sender, EventArgs e) => ValueXYZIncrement("ROTATION", 0, 0,  (Double)nudRotationStep.Value);
+
+        private void btnLinesSave_Click(object sender, EventArgs e)
         {
-            for (int i = 0; i < FLines.Count; i++)
-            {
-                //if (!tvLines.Nodes[i].Checked)
-                //    continue;
-                //TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], "POSITION"); // Get original line
-                //tv.x += (Double)nudMoveX.Value;
-                //tv.y += (Double)nudMoveY.Value;
-                //tv.z += (Double)nudMoveZ.Value;
-                //FLines[i] = tv.Concatenate();
-                //tvLines.Nodes[i].Text = FLines[i];
-            }
+            for (int i = clbLines.Items.Count - 1; 0 <= i; i--)
+                Lines[Entries[i]] = FLines[i] = clbLines.Items[i].ToString();
+            btnLinesReload.Visible =
+            btnLinesSave.  Visible = false;
         }
 
-        private void nudRotateXYZ_ValueChanged(object sender, EventArgs e)
+        private void btnLinesReload_Click(object sender, EventArgs e)
         {
-            for (int i = 0; i < FLines.Count; i++)
-            {
-                //if (!tvLines.Nodes[i].Checked)
-                //    continue;
-                //TagValues tv = new TagValues(Lines[(Int32)tvLines.Nodes[i].Tag], "ROTATION"); // Get original line
-                //tv.x += (Double)nudRotateX.Value;
-                //tv.y += (Double)nudRotateY.Value;
-                //tv.z += (Double)nudRotateZ.Value;
-                //FLines[i] = tv.Concatenate();
-                //tvLines.Nodes[i].Text = FLines[i];
-            }
-        }
-
-        private void nudMoveStep_ValueChanged  (object sender, EventArgs e) => nudMoveX.Increment   = nudMoveY.Increment   = nudMoveZ.Increment   = nudMoveStep.Value;
-        private void nudRotateStep_ValueChanged(object sender, EventArgs e) => nudRotateX.Increment = nudRotateY.Increment = nudRotateZ.Increment = nudRotateStep.Value;
-
-        private void btnSaveLines_Click(object sender, EventArgs e)
-        {
-            //foreach (TreeNode node in tvLines.Nodes)
-                //Lines[(Int32)node.Tag] = FLines[node.Index] = node.Text;
+            for (int i = FLines.Count - 1; 0 <= i; i--)
+                clbLines.Items[i] = FLines[i] = Lines[Entries[i]];
+            btnLinesReload.Visible =
+            btnLinesSave.  Visible = false;
         }
         #endregion
     }

@@ -90,12 +90,6 @@
     <None Include="Resources\checkerEmpty.png" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Resources\checkerFilled.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Resources\checkerInvert.png" />
-  </ItemGroup>
-  <ItemGroup>
     <None Include="Resources\delete.png" />
   </ItemGroup>
   <ItemGroup>
@@ -118,6 +112,13 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="filter.ico" />
+    <None Include="Resources\bulletEmpty.png" />
+    <None Include="Resources\checkerFilled.png" />
+    <None Include="Resources\PullScrollH.png" />
+    <None Include="Resources\equalNo.png" />
+    <None Include="Resources\equal.png" />
+    <None Include="Resources\MoveUp.png" />
+    <None Include="Resources\MoveDown.png" />
     <None Include="Resources\empty.png" />
     <None Include="Resources\deleteAll.png" />
   </ItemGroup>
